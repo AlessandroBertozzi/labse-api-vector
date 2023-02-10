@@ -17,8 +17,6 @@ class Query(BaseModel):
 @app.post("/get/vector/")
 async def say_hello(query: Query):
 
-    print(query.query_params)
-
     model = LaBSE()
 
     return {"vector": model(query.query_params)[0, :].tolist()}
