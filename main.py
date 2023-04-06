@@ -38,7 +38,7 @@ class Query(BaseModel):
     query_params: str
 
 
-@app.post("/get/vector/")
+@app.post("/vectorize/")
 async def vector(query: Query):
 
     return {"vector": model(query.query_params)[0, :].tolist()}
