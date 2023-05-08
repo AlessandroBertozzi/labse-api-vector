@@ -1,3 +1,5 @@
+FROM python:3.10-bullseye
+
 WORKDIR /usr/src/app
 
 # Install dependencies
