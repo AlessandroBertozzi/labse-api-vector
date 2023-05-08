@@ -5,12 +5,13 @@ from elasticsearch import Elasticsearch, helpers
 import stanza
 import os
 from serica.write import exist_document
+import threading
 
 app = FastAPI()
 
 # Get environment variables
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "9200")
+DB_HOST = os.getenv("DB_HOST","elasticsearch")
+DB_PORT = os.getenv("DB_PORT", "9201")
 DB_USER = os.getenv("DB_USER", "")
 DB_PASS = os.getenv("DB_PASS", "")
 doc_index = os.getenv("doc_index", "sentences")
@@ -44,6 +45,36 @@ async def vector(query: Query):
     return {"vector": model(query.query_params)[0, :].tolist()}
 
 
+
+def long_running_task(**kwargs):
+    text = kwargs.get('text')
+    title = kwargs.get('title')
+    slug = kwargs.get('slug')
+    document_id = kwargs.get('document_id')
+
+    parsed = nlp(text)
+    sentences = [sentence.text for sentence in parsed.sentences]
+    embeddings = model(sentences)
+
+    actions = list()
+
+    for i, sentence in enumerate(zip(sentences, embeddings)):
+        doc = {
+            "_index": "sentences",
+            "_source": {
+                "title": title,
+                "slug": slug,
+                "document_id": document_id,
+                "number": i,
+                "sentence": sentence[0],
+                "LaBSE_features": sentence[1]
+            }
+        }
+
+        actions.append(doc)
+
+    helpers.bulk(client, actions)
+
 class Transcription(BaseModel):
     title: str
     document_id: int
@@ -69,28 +100,35 @@ async def insertion(transcription: Transcription):
 
             output = {"status": 200, "message": "Sentences deleted and re-created"}
 
-        parsed = nlp(text)
-        sentences = [sentence.text for sentence in parsed.sentences]
-        embeddings = model(sentences)
+        thread = threading.Thread(target=long_running_task, kwargs={'text': text,
+                                                                    "title": title,
+                                                                    "slug": slug,
+                                                                    "document_id": document_id
+                                                                    })
+        thread.start()
 
-        actions = list()
-
-        for i, sentence in enumerate(zip(sentences, embeddings)):
-            doc = {
-                    "_index": "sentences",
-                    "_source": {
-                        "title": title,
-                        "slug": slug,
-                        "document_id": document_id,
-                        "number": i,
-                        "sentence": sentence[0],
-                        "LaBSE_features": sentence[1]
-                    }
-                }
-
-            actions.append(doc)
-
-        helpers.bulk(client, actions)
+        # parsed = nlp(text)
+        # sentences = [sentence.text for sentence in parsed.sentences]
+        # embeddings = model(sentences)
+        #
+        # actions = list()
+        #
+        # for i, sentence in enumerate(zip(sentences, embeddings)):
+        #     doc = {
+        #             "_index": "sentences",
+        #             "_source": {
+        #                 "title": title,
+        #                 "slug": slug,
+        #                 "document_id": document_id,
+        #                 "number": i,
+        #                 "sentence": sentence[0],
+        #                 "LaBSE_features": sentence[1]
+        #             }
+        #         }
+        #
+        #     actions.append(doc)
+        #
+        # helpers.bulk(client, actions)
     else:
         output["status"] = 404
         output["message"] = "Index not found"
