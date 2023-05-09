@@ -10,7 +10,7 @@ import threading
 app = FastAPI()
 
 # Get environment variables
-DB_HOST = os.getenv("DB_HOST","elasticsearch")
+DB_HOST = os.getenv("DB_HOST","localhost")
 DB_PORT = os.getenv("DB_PORT", "9201")
 DB_USER = os.getenv("DB_USER", "")
 DB_PASS = os.getenv("DB_PASS", "")
