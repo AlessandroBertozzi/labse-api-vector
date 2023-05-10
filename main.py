@@ -8,6 +8,8 @@ from serica.write import exist_document
 import threading
 from logging.config import dictConfig
 import logging
+from html.parser import HTMLParser
+# from tqdm import tqdm
 
 logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
@@ -47,7 +49,6 @@ class Query(BaseModel):
 
 @app.post("/vectorize/")
 async def vector(query: Query):
-
     return {"vector": model(query.query_params)[0, :].tolist()}
 
 
@@ -55,56 +56,53 @@ def long_running_task(**kwargs):
     text = kwargs.get('text')
     title = kwargs.get('title')
     slug = kwargs.get('slug')
-    logger.info("Start parsing")
     document_id = kwargs.get('document_id')
 
-    parsed = nlp(text)
+    bulk_list = list()
 
-    logger.info("Parsed")
-    sentences = [sentence.text for sentence in parsed.sentences]
+    logger.info(f"INFO: start process")
 
-    number_index_documents = 0
-    while len(sentences) > 0:
+    for n_section, section in enumerate(text):
 
-        sentence_sample = sentences[:500]
-        del sentences[:500]
+        logger.info({"message": f"start parsing section number {n_section}"})
 
-        logger.info(len(sentences))
+        parsed = nlp(section['xml_text'])
 
-        logger.info("Start creating embeddings")
-        embeddings = model(sentence_sample)
+        sentences = [sentence.text for sentence in parsed.sentences]
 
-        actions = list()
+        logger.info({"message": f"{len(sentences)} sentences prepared"})
 
-        logger.info("Start creating vocab")
-        for i, sentence in enumerate(zip(sentence_sample, embeddings)):
+        embeddings = model(sentences)
+
+        for i, sentence in enumerate(zip(sentences, embeddings)):
             doc = {
                 "_index": "sentences",
                 "_source": {
                     "title": title,
                     "slug": slug,
                     "document_id": document_id,
-                    "number": i + number_index_documents,
+                    "number": i,
+                    "_path": section["_path"],
                     "sentence": sentence[0],
                     "LaBSE_features": sentence[1]
                 }
             }
 
-            actions.append(doc)
+            bulk_list.append(doc)
 
-        logger.info("Start indexing")
-        helpers.bulk(client, actions)
+        if len(bulk_list) >= 500:
+            logger.info(f"indexing {len(bulk_list)} sentences")
+            helpers.bulk(client, bulk_list)
+            bulk_list.clear()
 
-        logger.info("End partial indexing")
-        number_index_documents += 500
-    logger.info("End indexing")
+    logger.info({"status_code": 200, "message": "indexing completed"})
 
 
 class Transcription(BaseModel):
     title: str
     document_id: int
     slug: str
-    text: str
+    xml_to_json: list
 
 
 @app.put("/insertion/")
@@ -112,7 +110,7 @@ async def insertion(transcription: Transcription):
     document_id = transcription.document_id
     title = transcription.title
     slug = transcription.slug
-    text = transcription.text
+    text = transcription.xml_to_json
     output = {"status": 200, "message": "Sentences created"}
 
     if client.indices.exists(index=doc_index):
