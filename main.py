@@ -62,7 +62,7 @@ def long_running_task(**kwargs):
 
     logger.info(f"INFO: start process")
 
-    for n_section, section in enumerate(text):
+    for n_section, section in enumerate(text, start=1):
 
         logger.info({"message": f"start parsing section number {n_section}"})
 
@@ -90,7 +90,8 @@ def long_running_task(**kwargs):
 
             bulk_list.append(doc)
 
-        if len(bulk_list) >= 500:
+        # index if is last section or the number of sentences if grater than 500
+        if len(bulk_list) >= 500 or n_section == len(text):
             logger.info(f"indexing {len(bulk_list)} sentences")
             helpers.bulk(client, bulk_list)
             bulk_list.clear()
