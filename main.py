@@ -18,7 +18,7 @@ app = FastAPI()
 
 # Get environment variables
 DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "9201")
+DB_PORT = os.getenv("DB_PORT", "9200")
 DB_USER = os.getenv("DB_USER", "")
 DB_PASS = os.getenv("DB_PASS", "")
 doc_index = os.getenv("doc_index", "sentences")
@@ -72,29 +72,34 @@ def long_running_task(**kwargs):
 
         logger.info({"message": f"{len(sentences)} sentences prepared"})
 
-        embeddings = model(sentences)
+        while len(sentences) > 0:
 
-        for i, sentence in enumerate(zip(sentences, embeddings)):
-            doc = {
-                "_index": "sentences",
-                "_source": {
-                    "title": title,
-                    "slug": slug,
-                    "document_id": document_id,
-                    "number": i,
-                    "_path": section["_path"],
-                    "sentence": sentence[0],
-                    "LaBSE_features": sentence[1]
+            sentence_batch = sentences[:500]
+            del sentences[:500]
+
+            embeddings = model(sentence_batch)
+
+            for i, sentence in enumerate(zip(sentence_batch, embeddings)):
+                doc = {
+                    "_index": "sentences",
+                    "_source": {
+                        "title": title,
+                        "slug": slug,
+                        "document_id": document_id,
+                        "number": i,
+                        "_path": section["_path"],
+                        "sentence": sentence[0],
+                        "LaBSE_features": sentence[1]
+                    }
                 }
-            }
 
-            bulk_list.append(doc)
+                bulk_list.append(doc)
 
-        # index if is last section or the number of sentences if grater than 500
-        if len(bulk_list) >= 500 or n_section == len(text):
-            logger.info(f"indexing {len(bulk_list)} sentences")
-            helpers.bulk(client, bulk_list)
-            bulk_list.clear()
+            # index if is last section or the number of sentences if grater than 500
+            if len(bulk_list) >= 500 or n_section == len(text):
+                logger.info(f"indexing {len(bulk_list)} sentences")
+                helpers.bulk(client, bulk_list)
+                bulk_list.clear()
 
     logger.info({"status_code": 200, "message": "indexing completed"})
 
