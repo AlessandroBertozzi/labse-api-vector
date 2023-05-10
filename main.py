@@ -16,7 +16,7 @@ app = FastAPI()
 
 # Get environment variables
 DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "9200")
+DB_PORT = os.getenv("DB_PORT", "9201")
 DB_USER = os.getenv("DB_USER", "")
 DB_PASS = os.getenv("DB_PASS", "")
 doc_index = os.getenv("doc_index", "sentences")
