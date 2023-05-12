@@ -72,15 +72,16 @@ async def vector(query: Query):
     return {"vector": model(query.query_params)[0, :].tolist()}
 
 
-def long_running_task(**kwargs):
-    text = kwargs.get('text')
-    title = kwargs.get('title')
-    slug = kwargs.get('slug')
-    document_id = kwargs.get('document_id')
+def long_running_task(text, title, slug, document_id):
+    text = text
+    title = title
+    slug = slug
+    document_id = document_id
 
     bulk_list = list()
 
-    cleaned_text_response = requests.post(NLP_API_HTTP + NLP_API_HOST + ":" + NLP_API_PORT + NLP_API_ENDPOINT, json={"mrc_xml_transcription_texts_json": text})
+    cleaned_text_response = requests.post(NLP_API_HTTP + NLP_API_HOST + ":" + NLP_API_PORT + NLP_API_ENDPOINT,
+                                          json={"mrc_xml_transcription_texts_json": text})
 
     cleaned_text = cleaned_text_response.json()["mrc_xml_transcription_texts_json"]
 
@@ -148,12 +149,14 @@ async def insertion(transcription: Transcription):
 
             output = {"status": 200, "message": "Sentences deleted and re-created"}
 
-        thread = threading.Thread(target=long_running_task, kwargs={'text': text,
-                                                                    "title": title,
-                                                                    "slug": slug,
-                                                                    "document_id": document_id
-                                                                    })
-        thread.start()
+        long_running_task(text, title, slug, document_id)
+
+        # thread = threading.Thread(target=long_running_task, kwargs={'text': text,
+        #                                                             "title": title,
+        #                                                             "slug": slug,
+        #                                                             "document_id": document_id
+        #                                                             })
+        # thread.start()
     else:
         output["status"] = 404
         output["message"] = "Index not found"
