@@ -1,30 +1,42 @@
 from fastapi import FastAPI
 from embedders.labse import LaBSE
-from pydantic import BaseModel
 from elasticsearch import Elasticsearch, helpers
 import stanza
 import os
 from serica.write import exist_document
+from serica.conf import create_index, Transcription, Query
 import threading
 from logging.config import dictConfig
 import logging
-from html.parser import HTMLParser
-# from tqdm import tqdm
+import requests
+import time
+from dotenv import load_dotenv
 
+# take environment variables from .env.
+load_dotenv()
+
+# take logs configuration
 logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
+# Initialize the app
 app = FastAPI()
 
 # Get environment variables
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "9201")
-DB_USER = os.getenv("DB_USER", "")
-DB_PASS = os.getenv("DB_PASS", "")
-doc_index = os.getenv("doc_index", "sentences")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASS")
+INDEX = os.getenv("INDEX")
+HTTP = os.getenv("HTTP")
+NLP_API_HTTP = os.getenv("NLP_API_HTTP")
+NLP_API_HOST = os.getenv("NLP_API_HOST")
+NLP_API_PORT = os.getenv("NLP_API_PORT")
+NLP_API_ENDPOINT = os.getenv("NLP_API_ENDPOINT")
+
 # Database connection
 client = Elasticsearch(
-    "http://" + DB_HOST + ":" + DB_PORT,
+    HTTP + DB_HOST + ":" + DB_PORT,
     basic_auth=(DB_USER, DB_PASS),
     verify_certs=True,
     request_timeout=10
@@ -36,15 +48,23 @@ model = LaBSE()
 # Initialize Stanza pipeline
 nlp = stanza.Pipeline(lang="la", processors="tokenize")
 
+# Create index in elastic if not exist
+tries = 10
+start_trial = 0
+while not client.indices.exists(index="sentences"):
+    create_index(client, "LaBSE", model.dim)
+    if not client.indices.exists(index="sentences"):
+        start_trial += 1
+        time.sleep(10)
+        if start_trial > tries:
+            logger.error(f"cannot create new sentences index")
+    else:
+        logger.error(f"create new sentences index")
+
 
 @app.get("/")
 async def root():
-    logger.info("Start parsing")
     return {"message": "This is the vector embeddings API for Serica!"}
-
-
-class Query(BaseModel):
-    query_params: str
 
 
 @app.post("/vectorize/")
@@ -60,9 +80,15 @@ def long_running_task(**kwargs):
 
     bulk_list = list()
 
+    cleaned_text_response = requests.post(NLP_API_HTTP + NLP_API_HOST + ":" + NLP_API_PORT + NLP_API_ENDPOINT, json={"mrc_xml_transcription_texts_json": text})
+
+    cleaned_text = cleaned_text_response.json()["mrc_xml_transcription_texts_json"]
+
+    logger.info({"status": cleaned_text_response.status_code, 'message': 'text cleaned'})
+
     logger.info(f"INFO: start process")
 
-    for n_section, section in enumerate(text, start=1):
+    for n_section, section in enumerate(cleaned_text, start=1):
 
         logger.info({"message": f"start parsing section number {n_section}"})
 
@@ -104,13 +130,7 @@ def long_running_task(**kwargs):
     logger.info({"status_code": 200, "message": "indexing completed"})
 
 
-class Transcription(BaseModel):
-    title: str
-    document_id: int
-    slug: str
-    xml_to_json: list
-
-
+# TODO: close endpoint with password
 @app.put("/insertion/")
 async def insertion(transcription: Transcription):
     document_id = transcription.document_id
@@ -119,11 +139,11 @@ async def insertion(transcription: Transcription):
     text = transcription.xml_to_json
     output = {"status": 200, "message": "Sentences created"}
 
-    if client.indices.exists(index=doc_index):
-        if exist_document(client, doc_index, 'document_id', document_id):
+    if client.indices.exists(index=INDEX):
+        if exist_document(client, INDEX, 'document_id', document_id):
             # Delete the document data for document_id
             client.delete_by_query(
-                index=doc_index, query={"term": {"document_id": document_id}}
+                index=INDEX, query={"term": {"document_id": document_id}}
             )
 
             output = {"status": 200, "message": "Sentences deleted and re-created"}
@@ -141,15 +161,16 @@ async def insertion(transcription: Transcription):
     return output
 
 
+# TODO: close endpoint with password
 @app.delete("/deletion/{document_id}/")
 async def deletion(document_id):
     output = {"status": 200, "message": "Document deleted"}
-    if client.indices.exists(index=doc_index):
-        if exist_document(client, doc_index, 'document_id', document_id):
+    if client.indices.exists(index=INDEX):
+        if exist_document(client, INDEX, 'document_id', document_id):
 
             # Delete the document data for document_id
             resp = client.delete_by_query(
-                index=doc_index, query={"term": {"document_id": document_id}}
+                index=INDEX, query={"term": {"document_id": document_id}}
             )
         else:
             output["status"] = 404
@@ -159,3 +180,9 @@ async def deletion(document_id):
         output["message"] = "Index not found"
 
     return output
+
+# @app.get("/test")
+# async def test():
+#     time.sleep(180)
+#     output = {"status": 200, "message": "completed"}
+#     return output
