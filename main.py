@@ -72,11 +72,12 @@ async def vector(query: Query):
     return {"vector": model(query.query_params)[0, :].tolist()}
 
 
-def long_running_task(text, title, slug, document_id):
+def long_running_task(text, title, slug, document_id, transcription_url):
     text = text
     title = title
     slug = slug
     document_id = document_id
+    transcription_url = transcription_url
 
     bulk_list = list()
 
@@ -113,6 +114,7 @@ def long_running_task(text, title, slug, document_id):
                         "title": title,
                         "slug": slug,
                         "document_id": document_id,
+                        "transcription_url": transcription_url,
                         "number": i,
                         "_path": section["_path"],
                         "sentence": sentence[0],
@@ -138,6 +140,7 @@ async def insertion(transcription: Transcription):
     title = transcription.title
     slug = transcription.slug
     text = transcription.xml_to_json
+    transcription_url = transcription.transcription_url
     output = {"status": 200, "message": "Sentences created"}
 
     if client.indices.exists(index=INDEX):
@@ -149,7 +152,7 @@ async def insertion(transcription: Transcription):
 
             output = {"status": 200, "message": "Sentences deleted and re-created"}
 
-        long_running_task(text, title, slug, document_id)
+        long_running_task(text, title, slug, document_id, transcription_url)
 
         # thread = threading.Thread(target=long_running_task, kwargs={'text': text,
         #                                                             "title": title,
