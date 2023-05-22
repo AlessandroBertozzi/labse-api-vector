@@ -72,7 +72,7 @@ async def vector(query: Query):
     return {"vector": model(query.query_params)[0, :].tolist()}
 
 
-def long_running_task(text, title, slug, document_id, transcription_url):
+def insertion_pipeline(text, title, slug, document_id, transcription_url):
     text = text
     title = title
     slug = slug
@@ -134,7 +134,7 @@ def long_running_task(text, title, slug, document_id, transcription_url):
 
 
 # TODO: close endpoint with password
-@app.put("/insertion/")
+@app.put("/insertion")
 async def insertion(transcription: Transcription):
     document_id = transcription.document_id
     title = transcription.title
@@ -145,21 +145,10 @@ async def insertion(transcription: Transcription):
 
     if client.indices.exists(index=INDEX):
         if exist_document(client, INDEX, 'document_id', document_id):
-            # Delete the document data for document_id
-            client.delete_by_query(
-                index=INDEX, query={"term": {"document_id": document_id}}
-            )
+            output = {"status": 403, "message": "Sentences already exist"}
 
-            output = {"status": 200, "message": "Sentences deleted and re-created"}
+        insertion_pipeline(text, title, slug, document_id, transcription_url)
 
-        long_running_task(text, title, slug, document_id, transcription_url)
-
-        # thread = threading.Thread(target=long_running_task, kwargs={'text': text,
-        #                                                             "title": title,
-        #                                                             "slug": slug,
-        #                                                             "document_id": document_id
-        #                                                             })
-        # thread.start()
     else:
         output["status"] = 404
         output["message"] = "Index not found"
@@ -186,9 +175,3 @@ async def deletion(document_id):
         output["message"] = "Index not found"
 
     return output
-
-# @app.get("/test")
-# async def test():
-#     time.sleep(180)
-#     output = {"status": 200, "message": "completed"}
-#     return output
