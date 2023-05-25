@@ -116,7 +116,7 @@ def insertion_pipeline(text, title, slug, document_id, transcription_url, n_iter
                         "slug": slug,
                         "document_id": document_id,
                         "transcription_url": transcription_url,
-                        "n_iteration": n_iteration,
+                        "n_chunk": n_iteration,
                         "number": i,
                         "_path": section["_path"],
                         "sentence": sentence[0],
