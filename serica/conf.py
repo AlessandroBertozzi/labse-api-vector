@@ -43,3 +43,4 @@ class Transcription(BaseModel):
     slug: str
     xml_to_json: list
     transcription_url: str
+    n_iteration: int

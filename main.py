@@ -72,12 +72,13 @@ async def vector(query: Query):
     return {"vector": model(query.query_params)[0, :].tolist()}
 
 
-def insertion_pipeline(text, title, slug, document_id, transcription_url):
+def insertion_pipeline(text, title, slug, document_id, transcription_url, n_iteration):
     text = text
     title = title
     slug = slug
     document_id = document_id
     transcription_url = transcription_url
+    n_iteration = n_iteration
 
     bulk_list = list()
 
@@ -92,7 +93,7 @@ def insertion_pipeline(text, title, slug, document_id, transcription_url):
 
     for n_section, section in enumerate(cleaned_text, start=1):
 
-        logger.info({"message": f"start parsing section number {n_section}"})
+        logger.info({"message": f"start parsing section number {n_section} of chunk number {n_iteration}"})
 
         parsed = nlp(section['xml_text'])
 
@@ -115,6 +116,7 @@ def insertion_pipeline(text, title, slug, document_id, transcription_url):
                         "slug": slug,
                         "document_id": document_id,
                         "transcription_url": transcription_url,
+                        "n_iteration": n_iteration,
                         "number": i,
                         "_path": section["_path"],
                         "sentence": sentence[0],
@@ -130,7 +132,7 @@ def insertion_pipeline(text, title, slug, document_id, transcription_url):
                 helpers.bulk(client, bulk_list)
                 bulk_list.clear()
 
-    logger.info({"status_code": 200, "message": "indexing completed"})
+    logger.info({"status_code": 200, "message": f"indexing of chunk number {n_iteration} completed"})
 
 
 # TODO: close endpoint with password
@@ -141,13 +143,12 @@ async def insertion(transcription: Transcription):
     slug = transcription.slug
     text = transcription.xml_to_json
     transcription_url = transcription.transcription_url
+    n_iteration = transcription.n_iteration
     output = {"status": 200, "message": "Sentences created"}
 
     if client.indices.exists(index=INDEX):
-        if exist_document(client, INDEX, 'document_id', document_id):
-            output = {"status": 403, "message": "Sentences already exist"}
 
-        insertion_pipeline(text, title, slug, document_id, transcription_url)
+        insertion_pipeline(text, title, slug, document_id, transcription_url, n_iteration)
 
     else:
         output["status"] = 404
