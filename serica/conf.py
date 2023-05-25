@@ -24,6 +24,9 @@ def create_index(es, target, model_dimension):
                 "number": {
                     "type": "long"
                 },
+                "n_chunk": {
+                    "type": "long"
+                },
                 f"{target}_features": {
                     "type": "dense_vector",
                     "dims": model_dimension
